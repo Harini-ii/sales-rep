@@ -112,11 +112,19 @@ def get_tickets(response: Response, db: Session = Depends(get_db)):
         ticket_items = [_to_support_ticket_hj_response(r) for r in new_records]
 
         # 2. Also include any legacy records from support_tickets_hj
-        legacy_records = (
-            db.query(SupportTicket)
-            .order_by(SupportTicket.created_at.desc())
-            .all()
-        )
+        try:
+            legacy_records = (
+                db.query(SupportTicket)
+                .order_by(SupportTicket.created_at.desc())
+                .all()
+            )
+        except SQLAlchemyError:
+            # The legacy table is absent in some deployments. Keep the current
+            # SUPPORT_TICKETS_HJ results usable when that compatibility table
+            # has not been created.
+            db.rollback()
+            legacy_records = []
+
         for lr in legacy_records:
             ticket_items.append(_to_legacy_ticket_response(lr))
 

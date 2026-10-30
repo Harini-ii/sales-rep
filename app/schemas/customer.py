@@ -24,6 +24,10 @@ class CustomerCreate(CustomerBase):
 
 
 class Customer(CustomerBase):
+    # Existing database rows may contain legacy values that are not valid
+    # email addresses. Keep strict EmailStr validation for input, while allowing
+    # the read API to return those stored values without failing serialization.
+    email: str
     customer_id: str
     id: Optional[Any] = None  # Backwards-compatible alias for customer_id
 

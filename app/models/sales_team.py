@@ -13,7 +13,7 @@ class SalesTeamMember(Base):
     __tablename__ = "SALES_TEAM_HJ"
     __table_args__ = {"schema": "admin_hj"}
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
@@ -33,7 +33,7 @@ class PasswordChange(Base):
     __table_args__ = {"schema": "sales_hj"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    sales_team_id = Column(Integer, nullable=True)
+    sales_team_id = Column(UUID(as_uuid=True), nullable=True)
     email = Column(String(255), nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     changed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -48,7 +48,7 @@ class PersonalInformation(Base):
     __table_args__ = {"schema": "sales_hj"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    sales_team_id = Column(Integer, nullable=True)
+    sales_team_id = Column(UUID(as_uuid=True), nullable=True)
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False, index=True)
     mobile_number = Column(String(50), nullable=False)

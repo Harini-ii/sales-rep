@@ -1,14 +1,15 @@
 from fastapi import FastAPI
-from app.routers import customers, requests, tickets, profile, images
+from app.routers import customers, requests, tickets, profile, images, events
 
 app = FastAPI(
     title="Helite Jet Sales Dashboard API",
-    description="API for managing customers, aviation requests, support tickets, and images.",
+    description="API for managing customers, aviation requests, support tickets, images, and events.",
     version="1.0.0"
 )
 
 app.include_router(customers.router)
 app.include_router(requests.router)
+app.include_router(events.router)
 app.include_router(tickets.router)
 app.include_router(profile.router)
 app.include_router(images.router)

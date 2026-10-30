@@ -1,188 +1,218 @@
+
 from datetime import datetime, timezone
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends, status
+from uuid import UUID
+from typing import List, Union
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.schemas.request import (
-    AviationRequest,
-    AviationRequestCreate,
-    AviationRequestUpdate,
-    AviationRequestStatusResponse,
-    RequestStatus
-)
-from app.models.request import AviationRequestModel, RequestStatusHistoryModel
 from app.database import get_db
-from app.data import mock_data
-
-router = APIRouter(
-    prefix="/requests",
-    tags=["Requests"]
+from app.models.request import (
+    AviationRequestModel,
+    SalesRequestHJ,
+    RequestStatusHistoryModel,
+)
+from app.schemas.request import (
+    SalesRequestCreate,
+    SalesRequestUpdate,
+    SalesRequestResponse,
+    SalesRequestStatusUpdate,
+    LegacyAviationRequestResponse,
+    RequestStatus,
 )
 
+router = APIRouter(prefix="/requests", tags=["Requests"])
 
-def _to_aviation_response(rec: AviationRequestModel) -> AviationRequest:
-    """Helper to convert database AviationRequestModel to AviationRequest schema."""
-    customer_name = rec.customer_name
-    customer_email = rec.customer_email
-    if not customer_name and isinstance(rec.customer_details, dict):
-        customer_name = rec.customer_details.get("name")
-    if not customer_email and isinstance(rec.customer_details, dict):
-        customer_email = rec.customer_details.get("email")
 
-    return AviationRequest(
-        request_id=rec.request_id,
-        customer_id=rec.customer_id,
-        request_type=rec.request_type or "BOOKING",
-        email=rec.customer_email or rec.customer_id,
-        mobile=rec.customer_mobile,
-        customer_name=customer_name,
-        customer_email=customer_email,
-        customer_mobile=rec.customer_mobile,
-        status=RequestStatus(rec.status) if rec.status in RequestStatus._value2member_map_ else RequestStatus.DRAFT,
-        service=rec.service,
-        passengers=rec.passengers or 1,
-        event_flight_details=rec.event_flight_details or {},
-        customer_details=rec.customer_details or {"name": customer_name, "email": customer_email}
+def _find_request(db: Session, request_key: str) -> SalesRequestHJ | None:
+    """Find a request by its UUID primary key or public request number."""
+    try:
+        request_uuid = UUID(request_key)
+    except ValueError:
+        request_uuid = None
+
+    if request_uuid is not None:
+        record = db.query(SalesRequestHJ).filter(SalesRequestHJ.id == request_uuid).first()
+        if record:
+            return record
+
+    return (
+        db.query(SalesRequestHJ)
+        .filter(SalesRequestHJ.request_number == request_key)
+        .first()
     )
 
 
-@router.get("/", response_model=List[AviationRequest], status_code=status.HTTP_200_OK)
+def _request_response(db: Session, record: SalesRequestHJ) -> SalesRequestResponse:
+    latest_status = (
+        db.query(RequestStatusHistoryModel.new_status)
+        .filter(RequestStatusHistoryModel.request_id == str(record.request_number))
+        .order_by(RequestStatusHistoryModel.changed_at.desc())
+        .limit(1)
+        .scalar()
+    )
+    response = SalesRequestResponse.model_validate(record)
+    return response.model_copy(update={"status": latest_status})
+
+
+def _legacy_request_response(
+    record: AviationRequestModel,
+) -> LegacyAviationRequestResponse:
+    customer_name = record.customer_name
+    customer_email = record.customer_email
+    if not customer_name and isinstance(record.customer_details, dict):
+        customer_name = record.customer_details.get("name")
+    if not customer_email and isinstance(record.customer_details, dict):
+        customer_email = record.customer_details.get("email")
+
+    raw_status = record.status or "DRAFT"
+    if raw_status not in RequestStatus._value2member_map_:
+        raw_status = "DRAFT"
+
+    return LegacyAviationRequestResponse(
+        request_id=record.request_id,
+        customer_id=record.customer_id,
+        request_type=record.request_type or "BOOKING",
+        email=customer_email or record.customer_id,
+        mobile=record.customer_mobile,
+        customer_name=customer_name,
+        customer_email=customer_email,
+        customer_mobile=record.customer_mobile,
+        status=raw_status,
+        service=record.service or "AVIATION",
+        passengers=record.passengers or 1,
+        event_flight_details=record.event_flight_details or {},
+        customer_details=record.customer_details or {
+            "name": customer_name,
+            "email": customer_email,
+        },
+    )
+
+
+@router.get("/", response_model=List[SalesRequestResponse])
 def get_all_requests(db: Session = Depends(get_db)):
-    """
-    Retrieve all aviation and booking requests for the Sales Requests dashboard list.
-    """
     try:
-        records = db.query(AviationRequestModel).order_by(AviationRequestModel.request_id.desc()).all()
-        return [_to_aviation_response(r) for r in records]
-    except SQLAlchemyError as db_err:
+        records = (
+            db.query(SalesRequestHJ)
+            .order_by(SalesRequestHJ.created_at.desc())
+            .all()
+        )
+        return [_request_response(db, record) for record in records]
+    except SQLAlchemyError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error retrieving requests: {str(db_err)}"
+            status_code=500,
+            detail="Database error retrieving requests",
         )
 
 
-@router.get("/{request_id}", response_model=AviationRequest, status_code=status.HTTP_200_OK)
+@router.get(
+    "/{request_id}",
+    response_model=Union[SalesRequestResponse, LegacyAviationRequestResponse],
+)
 def get_request(request_id: str, db: Session = Depends(get_db)):
-    """
-    Fetch full aviation request details by request ID (used when clicking 'VIEW').
-    """
-    clean_id = request_id.strip()
     try:
-        record = db.query(AviationRequestModel).filter(AviationRequestModel.request_id.ilike(clean_id)).first()
-        if not record:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
-                detail=f"Request '{request_id}' not found"
-            )
-        return _to_aviation_response(record)
+        record = _find_request(db, request_id.strip())
+        if record:
+            return _request_response(db, record)
+
+        legacy_record = (
+            db.query(AviationRequestModel)
+            .filter(AviationRequestModel.request_id.ilike(request_id.strip()))
+            .first()
+        )
+        if legacy_record:
+            return _legacy_request_response(legacy_record)
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"Request '{request_id}' not found",
+        )
+
     except HTTPException:
         raise
-    except SQLAlchemyError as db_err:
+    except SQLAlchemyError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error fetching request: {str(db_err)}"
+            status_code=500,
+            detail="Database error fetching request",
         )
 
 
-@router.put("/{request_id}/status", response_model=AviationRequestStatusResponse, status_code=status.HTTP_200_OK)
-@router.post("/{request_id}/status", response_model=AviationRequestStatusResponse, status_code=status.HTTP_200_OK)
-def update_request_status(request_id: str, update_data: AviationRequestUpdate, db: Session = Depends(get_db)):
-    """
-    Update the status of an aviation request via the dropdown.
-    Logs the status transition into sales_hj.request_status_history and commits to PostgreSQL.
-    """
-    clean_id = request_id.strip()
+@router.put(
+    "/{request_id}/status",
+    response_model=SalesRequestResponse,
+)
+def update_request_status(
+    request_id: str,
+    update_data: SalesRequestStatusUpdate,
+    db: Session = Depends(get_db),
+):
     try:
-        record = db.query(AviationRequestModel).filter(AviationRequestModel.request_id.ilike(clean_id)).first()
+        record = _find_request(db, request_id.strip())
+
         if not record:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
-                detail=f"Request '{request_id}' not found"
+                status_code=404,
+                detail=f"Request '{request_id}' not found",
             )
 
-        old_status = record.status
+        old_status = (
+            db.query(RequestStatusHistoryModel.new_status)
+            .filter(RequestStatusHistoryModel.request_id == str(record.request_number))
+            .order_by(RequestStatusHistoryModel.changed_at.desc())
+            .limit(1)
+            .scalar()
+        )
         new_status = update_data.status.value
-
-        # Update status
-        record.status = new_status
         record.updated_at = datetime.now(timezone.utc)
 
-        # Log status transition history
-        current_user = mock_data.profile_db.get("email") or "sales_team"
         history_entry = RequestStatusHistoryModel(
-            request_id=record.request_id,
+            request_id=str(record.request_number),
             old_status=old_status,
             new_status=new_status,
-            changed_by=current_user
+            changed_by="sales_team",
         )
-        db.add(history_entry)
 
+        db.add(history_entry)
         db.commit()
         db.refresh(record)
 
-        return AviationRequestStatusResponse(
-            request_id=record.request_id,
-            status=update_data.status,
-            message="Request status updated successfully"
-        )
+        return _request_response(db, record)
+
     except HTTPException:
         db.rollback()
         raise
-    except SQLAlchemyError as db_err:
+    except SQLAlchemyError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error updating request status: {str(db_err)}"
+            status_code=500,
+            detail="Database error updating request status",
         )
 
 
-@router.post("/", response_model=AviationRequest, status_code=status.HTTP_201_CREATED)
-def create_request(data: AviationRequestCreate, db: Session = Depends(get_db)):
-    """
-    Create a new aviation request record in sales_hj.requests.
-    """
-    req_id = data.request_id
-    if not req_id:
-        count = db.query(AviationRequestModel).count() + 1
-        req_id = f"HJ-{1020 + count:05d}"
-
-    existing = db.query(AviationRequestModel).filter(AviationRequestModel.request_id == req_id).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Request with ID '{req_id}' already exists."
-        )
-
-    flight_details = data.event_flight_details.model_dump() if data.event_flight_details else {}
-    cust_details = data.customer_details.model_dump() if data.customer_details else {
-        "name": data.customer_name,
-        "email": data.customer_email
-    }
-
-    new_rec = AviationRequestModel(
-        request_id=req_id,
-        customer_id=data.customer_id,
-        request_type=data.request_type or "BOOKING",
-        service=data.service or "AVIATION",
-        status=data.status.value if data.status else "DRAFT",
-        passengers=data.passengers or 1,
-        customer_name=data.customer_name,
-        customer_email=data.customer_email,
-        customer_mobile=data.customer_mobile,
-        event_flight_details=flight_details,
-        customer_details=cust_details
-    )
-
+@router.post(
+    "/",
+    response_model=SalesRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_request(
+    data: SalesRequestCreate,
+    db: Session = Depends(get_db),
+):
     try:
-        db.add(new_rec)
-        db.commit()
-        db.refresh(new_rec)
-        return _to_aviation_response(new_rec)
-    except SQLAlchemyError as db_err:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error creating request: {str(db_err)}"
+        new_record = SalesRequestHJ(
+            **data.model_dump(),
         )
 
+        db.add(new_record)
+        db.commit()
+        db.refresh(new_record)
+
+        return new_record
+
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Database error creating request",
+        )

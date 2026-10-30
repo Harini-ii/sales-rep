@@ -1,4 +1,5 @@
 import uuid
+from uuid import UUID
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, status, Query
@@ -143,9 +144,9 @@ def list_images(
 
 
 @router.get("/{image_id}", response_model=ImageRecord, status_code=status.HTTP_200_OK)
-def get_image(image_id: str, db: Session = Depends(get_db)):
+def get_image(image_id: UUID, db: Session = Depends(get_db)):
     """
-    Fetch a specific image record by its unique identifier (e.g., IMG-001) from PostgreSQL.
+    Fetch a specific image record by its UUID from PostgreSQL.
     Returns 404 Not Found if the image does not exist.
     """
     try:
@@ -171,7 +172,7 @@ def get_image(image_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{image_id}", response_model=ImageRecord, status_code=status.HTTP_200_OK)
-def delete_image(image_id: str, db: Session = Depends(get_db)):
+def delete_image(image_id: UUID, db: Session = Depends(get_db)):
     """
     Remove an image record from PostgreSQL (sales_hj.aircraft_images).
     NOTE: In accordance with data retention requirements, this removes or disables

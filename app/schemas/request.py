@@ -13,10 +13,11 @@ class SalesRequestBase(BaseModel):
     customer_id: UUID
 
     service_type: str
+    service_subtype: str | None = None
     service_sub_type: str | None = None
     people_count: int | None = Field(default=None, ge=1)
 
-    # Matches the existing database column "buget".
+    budget: Decimal | None = Field(default=None, ge=0)
     buget: Decimal | None = Field(default=None, ge=0)
     currency: str | None = None
 
@@ -31,8 +32,36 @@ class SalesRequestBase(BaseModel):
     service_details: dict[str, Any] | None = None
     request_mode: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def harmonize_aliases(cls, data: Any):
+        if isinstance(data, dict):
+            # Harmonize budget / buget
+            if "budget" in data and "buget" not in data:
+                data["buget"] = data["budget"]
+            elif "buget" in data and "budget" not in data:
+                data["budget"] = data["buget"]
+
+            # Harmonize service_subtype / service_sub_type
+            if "service_subtype" in data and "service_sub_type" not in data:
+                data["service_sub_type"] = data["service_subtype"]
+            elif "service_sub_type" in data and "service_subtype" not in data:
+                data["service_subtype"] = data["service_sub_type"]
+        return data
+
     @model_validator(mode="after")
-    def validate_dates(self):
+    def validate_dates_and_sync(self):
+        # Sync values across aliases
+        if self.budget is None and self.buget is not None:
+            self.budget = self.buget
+        elif self.buget is None and self.budget is not None:
+            self.buget = self.budget
+
+        if self.service_subtype is None and self.service_sub_type is not None:
+            self.service_subtype = self.service_sub_type
+        elif self.service_sub_type is None and self.service_subtype is not None:
+            self.service_sub_type = self.service_subtype
+
         if (
             self.start_date is not None
             and self.end_date is not None
@@ -50,9 +79,11 @@ class SalesRequestCreate(SalesRequestBase):
 
 class SalesRequestUpdate(BaseModel):
     service_type: str | None = None
+    service_subtype: str | None = None
     service_sub_type: str | None = None
     people_count: int | None = Field(default=None, ge=1)
 
+    budget: Decimal | None = Field(default=None, ge=0)
     buget: Decimal | None = Field(default=None, ge=0)
     currency: str | None = None
 
@@ -67,7 +98,7 @@ class SalesRequestUpdate(BaseModel):
     service_details: dict[str, Any] | None = None
     request_mode: str | None = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
 
 class SalesRequestResponse(SalesRequestBase):
@@ -91,6 +122,8 @@ class RequestStatus(str, Enum):
     SALES_CONTACTED = "SALES_CONTACTED"
     OPTIONS_FOUND = "OPTIONS_FOUND"
     QUOTE_SENT = "QUOTE_SENT"
+    CUSTOMER_APPROVAL = "CUSTOMER_APPROVAL"
+    PAYMENT_PENDING = "PAYMENT_PENDING"
     BOOKED = "BOOKED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"

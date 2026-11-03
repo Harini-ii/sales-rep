@@ -17,11 +17,20 @@ class SalesTeamMember(Base):
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
-    mobile_number = Column(String(50), nullable=False)
+    mobile = Column(String(50), nullable=False)
     department = Column(String(100), nullable=False, default="sales")
     notes = Column(String, nullable=True)
-    identity_document = Column(String, nullable=True)
+    identity_doc_name = Column(String, nullable=True)
+    identity_doc_path = Column(String, nullable=True)
     joined_at = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def mobile_number(self) -> str:
+        return self.mobile
+
+    @mobile_number.setter
+    def mobile_number(self, val: str):
+        self.mobile = val
 
 
 class PasswordChange(Base):

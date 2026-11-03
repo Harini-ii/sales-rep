@@ -52,22 +52,23 @@ def update_account_details(account_data: AccountUpdate, db: Session = Depends(ge
     """
     try:
         member = _get_current_salesperson(db)
-        target_email = str(account_data.email).strip()
+        target_email = str(account_data.email).strip() if account_data.email else member.email
 
         # Check for duplicate email across other sales team members
-        duplicate = (
-            db.query(SalesTeamMember)
-            .filter(
-                SalesTeamMember.email == target_email,
-                SalesTeamMember.id != member.id
+        if account_data.email:
+            duplicate = (
+                db.query(SalesTeamMember)
+                .filter(
+                    SalesTeamMember.email == target_email,
+                    SalesTeamMember.id != member.id
+                )
+                .first()
             )
-            .first()
-        )
-        if duplicate:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email address '{target_email}' is already in use by another salesperson."
-            )
+            if duplicate:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Email address '{target_email}' is already in use by another salesperson."
+                )
 
         # Update primary salesperson record in admin_hj.sales_team_hj
         member.full_name = account_data.full_name.strip()

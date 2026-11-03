@@ -29,11 +29,15 @@ def _get_current_salesperson() -> tuple[str, str]:
 def _to_support_ticket_hj_response(record: SupportTicketHJ) -> Ticket:
     """Helper to convert SupportTicketHJ (UUID) to unified Ticket response schema."""
     uuid_str = str(record.id)
+    req_id = record.requester_id or record.request_id
+    req_role = record.requester_role or record.request_role or "SALES"
     return Ticket(
         id=uuid_str,
         ticket_id=uuid_str,
-        request_id=record.request_id,
-        request_role=record.request_role or "SALES",
+        request_id=req_id,
+        requester_id=req_id,
+        request_role=req_role,
+        requester_role=req_role,
         subject=record.subject,
         message=record.message,
         status=record.status or "OPEN",
@@ -70,11 +74,12 @@ def create_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
     Generates a unique UUID for ticket ID and initializes status to OPEN.
     """
     now = datetime.now(timezone.utc)
-    assigned_request_id = ticket_data.request_id.strip() if ticket_data.request_id else str(uuid.uuid4())
+    req_id = (ticket_data.requester_id or ticket_data.request_id or str(uuid.uuid4())).strip()
+    req_role = (ticket_data.requester_role or ticket_data.request_role or "SALES").strip()
     new_ticket = SupportTicketHJ(
         id=uuid.uuid4(),
-        request_id=assigned_request_id,
-        request_role=ticket_data.request_role.strip() if ticket_data.request_role else "SALES",
+        requester_id=req_id,
+        requester_role=req_role,
         subject=ticket_data.subject.strip(),
         message=ticket_data.message.strip(),
         status="OPEN",

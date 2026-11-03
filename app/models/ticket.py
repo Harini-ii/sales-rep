@@ -33,8 +33,24 @@ class SupportTicketHJ(Base):
     __table_args__ = {"schema": "sales_hj"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    request_id = Column(String(50), default=lambda: str(uuid.uuid4()), nullable=True, index=True)
-    request_role = Column(String(50), nullable=True, default="SALES")
+    requester_id = Column(String(50), default=lambda: str(uuid.uuid4()), nullable=True, index=True)
+    requester_role = Column(String(50), nullable=True, default="SALES")
+
+    @property
+    def request_id(self) -> str | None:
+        return self.requester_id
+
+    @request_id.setter
+    def request_id(self, val: str):
+        self.requester_id = val
+
+    @property
+    def request_role(self) -> str | None:
+        return self.requester_role
+
+    @request_role.setter
+    def request_role(self, val: str):
+        self.requester_role = val
     subject = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String(50), nullable=False, default="OPEN", index=True)

@@ -36,11 +36,10 @@ class SalesRequestHJ(Base):
     customer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
 
     service_type = Column(String, nullable=False)
-    service_sub_type = Column(String, nullable=True)
+    service_subtype = Column(String, nullable=True)
     people_count = Column(Integer, nullable=True)
 
-    # Matches the actual database column spelling.
-    buget = Column(Numeric, nullable=True)
+    budget = Column(Numeric, nullable=True)
     currency = Column(String, nullable=True)
 
     departure = Column(String, nullable=True)

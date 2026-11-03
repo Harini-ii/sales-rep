@@ -1,5 +1,6 @@
-from fastapi import FastAPI
-from app.routers import customers, requests, tickets, profile, images, events
+from fastapi import FastAPI, APIRouter
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import customers, requests, tickets, profile, images, events, dashboard
 
 app = FastAPI(
     title="Helite Jet Sales Dashboard API",
@@ -7,12 +8,42 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Enable CORS for web and mobile frontends (pushpakavimanam & Flutter)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Standard endpoints
+app.include_router(dashboard.router)
 app.include_router(customers.router)
 app.include_router(requests.router)
 app.include_router(events.router)
 app.include_router(tickets.router)
 app.include_router(profile.router)
 app.include_router(images.router)
+
+# Support /sales prefix for frontend callers (pushpakavimanam)
+app.include_router(customers.router, prefix="/sales")
+app.include_router(requests.router, prefix="/sales")
+app.include_router(events.router, prefix="/sales")
+app.include_router(tickets.router, prefix="/sales")
+app.include_router(profile.router, prefix="/sales")
+app.include_router(images.router, prefix="/sales")
+
+# Support /support and /sales/support aliases
+support_alias = APIRouter(tags=["Support"])
+support_alias.add_api_route("/", tickets.get_tickets, methods=["GET"], response_model=tickets.TicketListResponse)
+support_alias.add_api_route("", tickets.get_tickets, methods=["GET"], response_model=tickets.TicketListResponse, include_in_schema=False)
+support_alias.add_api_route("/", tickets.create_ticket, methods=["POST"], response_model=tickets.Ticket, status_code=201)
+support_alias.add_api_route("", tickets.create_ticket, methods=["POST"], response_model=tickets.Ticket, status_code=201, include_in_schema=False)
+support_alias.add_api_route("/{ticket_id}", tickets.get_ticket_by_id, methods=["GET"], response_model=tickets.Ticket)
+
+app.include_router(support_alias, prefix="/support")
+app.include_router(support_alias, prefix="/sales/support")
 
 @app.get("/")
 def home():

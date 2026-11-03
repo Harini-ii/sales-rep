@@ -20,10 +20,12 @@ def _to_customer_response(rec: CustomerModel) -> Customer:
     cid_str = str(rec.customer_id) if rec.customer_id else str(rec.id)
     phone = rec.mobile or ""
     joined_date = rec.joined or (rec.created_at.date() if rec.created_at else date.today())
+    cust_name = rec.full_name or rec.name
     return Customer(
         customer_id=cid_str,
         id=cid_str,
-        name=rec.name,
+        full_name=cust_name,
+        name=cust_name,
         email=rec.email,
         phone_number=phone,
         mobile=phone,
@@ -104,9 +106,10 @@ def create_customer(customer_data: CustomerCreate, db: Session = Depends(get_db)
         )
 
     phone = customer_data.mobile or customer_data.phone_number or ""
+    cust_name = (customer_data.full_name or customer_data.name or "").strip()
     new_customer = CustomerModel(
         customer_id=uuid.uuid4(),
-        name=customer_data.name.strip(),
+        full_name=cust_name,
         email=target_email,
         mobile=phone.strip(),
         country=customer_data.country or "",

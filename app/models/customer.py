@@ -16,7 +16,15 @@ class CustomerModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     customer_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True)
-    name = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    
+    @property
+    def name(self) -> str:
+        return self.full_name
+
+    @name.setter
+    def name(self, val: str):
+        self.full_name = val
     email = Column(String(255), nullable=False, unique=True, index=True)
     mobile = Column(String(50), nullable=True)
     subscription = Column(String(100), default="Basic")

@@ -8,8 +8,10 @@ class TicketCreate(BaseModel):
     """Schema for submitting a support ticket."""
     subject: str = Field(..., min_length=1, description="Subject of the support ticket")
     message: str = Field(..., min_length=1, description="Detailed message for the support ticket")
-    request_id: Optional[str] = Field(None, description="Optional linked request ID (e.g. HJ-01023)")
+    request_id: Optional[str] = Field(None, description="Optional linked request ID")
+    requester_id: Optional[str] = Field(None, description="Optional requester ID")
     request_role: Optional[str] = Field("SALES", description="Role of the creator (default: SALES)")
+    requester_role: Optional[str] = Field("SALES", description="Role of the creator (default: SALES)")
 
 
 class Ticket(BaseModel):
@@ -17,7 +19,9 @@ class Ticket(BaseModel):
     id: Union[UUID, str, int] = Field(..., description="Ticket identifier (UUID)")
     ticket_id: Optional[str] = Field(None, description="Formatted ticket ID or UUID")
     request_id: Optional[str] = Field(None, description="Associated aviation request ID")
+    requester_id: Optional[str] = Field(None, description="Requester ID")
     request_role: Optional[str] = Field("SALES", description="Role of the requester")
+    requester_role: Optional[str] = Field("SALES", description="Role of the requester")
     subject: str = Field(..., description="Ticket subject")
     message: str = Field(..., description="Ticket message")
     status: str = Field(default="OPEN", description="Ticket status (OPEN, IN_PROGRESS, RESOLVED, CLOSED)")
